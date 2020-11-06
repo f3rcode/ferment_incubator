@@ -1,16 +1,14 @@
 #include <DHT.h>
 #include <DHT_U.h>
 
-
 #define DHTPIN 7 
 #define LED 13 //led interno
 #define RELAYPIN A0
 #define WARNING_LED 9
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
 
-
 //Temperature
-#define TEMPEH 31 // 28-32 Celsius degrees (max 33 (or 35?)!! CHECK)
+#define TEMPEH 31// 28-32 Celsius degrees (max 33 (or 35?)!! CHECK)
 #define WARNING_TEMPEH 32
 #define NATTO  40 //from about body temperature to 45
 #define KOJI   28 // 27–35°C
@@ -46,7 +44,7 @@ void setup() {
   while (!Serial);      // wait for Serial Port to open
   Serial.begin(9600); 
 
- //Relay setup
+  //Relay setup
   pinMode(RELAYPIN, OUTPUT);
   digitalWrite(RELAYPIN, HIGH);
   
@@ -55,6 +53,7 @@ void setup() {
   digitalWrite(WARNING_LED, LOW);
 
   dht.begin();
+ // Serial.println("Begining!:");
   delay(500);
 }
 
@@ -122,6 +121,7 @@ void loop() {
 
     
     }else{ //if fermentation is beyond its limit time
+        digitalWrite(RELAYPIN, LOW); 
         digitalWrite(LED, LOW);    
         delay(blinkingTime); 
     }
