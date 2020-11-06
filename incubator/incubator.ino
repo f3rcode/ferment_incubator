@@ -63,67 +63,64 @@ void loop() {
     if (millis()>ONE_DAY) //in case of TEMPEH fermentation
       on=false;
       
+    //-------Sensor reading------
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
 
-    if (on){
-
-          //-------Sensor reading------
-          float h = dht.readHumidity();
-          float t = dht.readTemperature();
-        
-          if (isnan(t) || isnan(h)) {
-            Serial.println("Failed to read from DHT");
-          } else { 
+    if (isnan(t) || isnan(h)) {
+         Serial.println("Failed to read from DHT");
+    } else { 
        
+        if (on){
+    
+             if (t>(Setpoint-threshold)) {
         
-         if (t>(Setpoint-threshold)) {
-    
-            //it only executes once: first time temperature gets higher than Setpoint-initStop
-            if ((t>(Setpoint-ERROR_TEMP))&&(!thresholdFlag)){
-                threshold=ERROR_TEMP;
-                thresholdFlag=true; 
-            }
-    
-            /*thought to be executed when temperature gets higher than warning value
-           when exothermic reaction starts to happen.
-            */
-            if ((t> WARNING_TEMPEH)&&(thresholdFlag)){
-              threshold=ERROR_EXOTHERMIC_TEMP;
-              digitalWrite(WARNING_LED, HIGH);
-              }
-            
-            Serial.println("stop it!");
-            relayOutput=0;
-            digitalWrite(RELAYPIN, LOW);
-                             
-           }
-         else{
-            
-              Serial.println("warm it!");
-              relayOutput=1;
-              digitalWrite(RELAYPIN, HIGH);       
-            }
-    
-     
+                //it only executes once: first time temperature gets higher than Setpoint-initStop
+                if ((t>(Setpoint-ERROR_TEMP))&&(!thresholdFlag)){
+                    threshold=ERROR_TEMP;
+                    thresholdFlag=true; 
+                }
         
-          Serial.print(t);
-          Serial.print(':');
-          Serial.print(relayOutput);
-          Serial.println(':');
+                /*thought to be executed when temperature gets higher than warning value
+               when exothermic reaction starts to happen.
+                */
+                if ((t> WARNING_TEMPEH)&&(thresholdFlag)){
+                  threshold=ERROR_EXOTHERMIC_TEMP;
+                  digitalWrite(WARNING_LED, HIGH);
+                }
+                
+                //Serial.println("stop it!");
+                relayOutput=0;
+                digitalWrite(RELAYPIN, LOW);
+                                 
+             }else{
+                
+                  //Serial.println("warm it!");
+                  relayOutput=1;
+                  digitalWrite(RELAYPIN, HIGH);       
+             }
+                  
+           
+            //--------working--------
+            digitalWrite(LED, HIGH); 
+            delay(blinkingTime);              
+            digitalWrite(LED, LOW);    
+            delay(blinkingTime); 
     
-      
+        
+        }else{ //if fermentation is beyond its limit time
+          
+            digitalWrite(RELAYPIN, LOW); 
+            digitalWrite(LED, LOW);    
+            delay(blinkingTime); 
         }
-        //---------Blinking internal led so I can see it's working--------
-    
-          digitalWrite(LED, HIGH); 
-          delay(blinkingTime);              
-          digitalWrite(LED, LOW);    
-          delay(blinkingTime); 
 
-    
-    }else{ //if fermentation is beyond its limit time
-        digitalWrite(RELAYPIN, LOW); 
-        digitalWrite(LED, LOW);    
-        delay(blinkingTime); 
+       Serial.print(t);
+       Serial.print(':');
+       Serial.print(h);
+       Serial.print(':');
+       Serial.print(relayOutput);
     }
+   
 
 }
