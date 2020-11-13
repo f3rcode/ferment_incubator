@@ -16,7 +16,9 @@ From Arduino IDE.
 
 ## Usage
 
-By now, Arduino IDE's Serial Monitor provides the minimal interface, where a menu is shown and sensor values when fermentation is ongoing.
+By now, Arduino IDE's Serial Monitor provides the minimal interface, where a menu is shown and sensor values when fermentation is ongoing.  
+
+To check sensor and relay values on Serial Monitor, debugging flag must be true.  
 
 ## License
 GPLv3 

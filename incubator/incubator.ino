@@ -30,7 +30,7 @@ boolean decreasingFlag= false;
 boolean on= false;
 
 //Debug
-boolean debugging=true;
+boolean debugging=false;
 
 float t=0;
 float h=0;
@@ -78,7 +78,8 @@ const SerialMenuEntry mainMenu[] = {
                                   Serial.println("Go!");
                                   fermentLoop();
                                   } },
-  {mainMenuKoji, true, '3', [](){ Serial.println("Still not available."); } },
+  {mainMenuKoji, true, '3', [](){ Serial.println("Still not available.");
+                                  menu.show();} },
   {mainMenuConfig, true, 'C', [](){ menu.load(configMenu, configMenuSize); menu.show();} },
   {mainMenuMenu, true, 'M', [](){ menu.show(); } },
 
@@ -98,11 +99,14 @@ const char configMenuBack[] PROGMEM = "< - Main Menu";
 
 // Define the config-menu
 const SerialMenuEntry configMenu[] = {
-  {configMenuTemp, true, 'T', [](){ setpoint = menu.getNumber<float>("Temp: "); } },
-  {configMenuTime, true, 'H', [](){ timeLimit = 3600000* menu.getNumber<int>("Time (hours): "); } }, //SHOULD LET USE PARTS OF AN HOUR AS A VALUE!
-  {configMenuStart, true, '!',[](){ if ((setpoint==0) || (timeLimit==0))
+  {configMenuTemp, true, 'T', [](){ setpoint = menu.getNumber<float>("Temp: ");
+                                    menu.show();} },
+  {configMenuTime, true, 'H', [](){ timeLimit = 3600000* menu.getNumber<int>("Time (hours): "); 
+                                    menu.show();} }, //SHOULD LET USE PARTS OF AN HOUR AS A VALUE!
+  {configMenuStart, true, '!',[](){ if ((setpoint==0) || (timeLimit==0)){
                                         Serial.println("You need to set temp & time!");
-                                    else{
+                                        menu.show();
+                                      }else{
                                       Serial.print("Temp:"); Serial.println(setpoint);
                                       Serial.print("Time: "); Serial.println(timeLimit);
                                       Serial.println("Go!");
@@ -112,8 +116,6 @@ const SerialMenuEntry configMenu[] = {
   {configMenuBack, true, '<', [](){ menu.load(mainMenu, mainMenuSize); menu.show(); }},
 };
 constexpr uint8_t configMenuSize = GET_MENU_SIZE(configMenu);
-
-
 
 
 
