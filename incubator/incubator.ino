@@ -15,7 +15,9 @@
 #define TEMPEH 31// 28-32 Celsius degrees (max 33 (or 35?)!! CHECK)
 #define WARNING_TEMPEH 32
 #define NATTO  42 //from about body temperature to 45
+#define WARNING_NATTO 45
 #define KOJI   28 // 27–35°C
+#define WARNING_KOJI 33
 #define ERROR_TEMP 1 
 #define ERROR_EXOTHERMIC_TEMP 2
 
@@ -23,17 +25,18 @@
 #define ONE_DAY 86400000
 #define TWO_DAYS 172800000
 #define THREE_DAYS 259200000
-
+#define HOURS2MS 3600000
 
 boolean thresholdFlag= false;
 boolean decreasingFlag= false;
 boolean on= false;
 
 //Debug
-boolean debugging=false;
+boolean debugging=true;
 
 float t=0;
 float h=0;
+float warningTemperature;
 
 float setpoint=0;
 float initStop=2; //first of all, it stops warming 2degrees below setpoint (in theory, by inerce it arrives the setpoint¿)
@@ -42,10 +45,11 @@ float threshold=initStop;
 byte relayOutput=0;
 
 //Temporal Variables
-unsigned int timeLimit=0;
-unsigned int startingTime=0;
-int blinkingTime=200;
+unsigned long timeLimit=0;
+unsigned long startingTime=0;
+int blinkingTime=700;
 
+void fermentLoop();
 
 const SerialMenu& menu = SerialMenu::get();
 
@@ -64,17 +68,18 @@ const char mainMenuMenu[] PROGMEM = "M - Menu";
 // Forward declarations for the config-menu referenced before it is defined.
 extern const SerialMenuEntry configMenu[];
 extern const uint8_t configMenuSize;
-void fermentLoop();
 
 // Define the main menu
 const SerialMenuEntry mainMenu[] = {
   {mainMenuTempeh, true, '1', [](){ setpoint=TEMPEH;  
                                     timeLimit=ONE_DAY;
+                                    warningTemperature=WARNING_TEMPEH;
                                     Serial.println("Go!");
                                     fermentLoop();
                                   } },
   {mainMenuNatto, true, '2', [](){setpoint=NATTO;  
                                   timeLimit=ONE_DAY;
+                                  warningTemperature=WARNING_NATTO;
                                   Serial.println("Go!");
                                   fermentLoop();
                                   } },
@@ -100,8 +105,9 @@ const char configMenuBack[] PROGMEM = "< - Main Menu";
 // Define the config-menu
 const SerialMenuEntry configMenu[] = {
   {configMenuTemp, true, 'T', [](){ setpoint = menu.getNumber<float>("Temp: ");
+                                    warningTemperature = setpoint + ERROR_TEMP;
                                     menu.show();} },
-  {configMenuTime, true, 'H', [](){ timeLimit = 3600000* menu.getNumber<int>("Time (hours): "); 
+  {configMenuTime, true, 'H', [](){ timeLimit = HOURS2MS * menu.getNumber<int>("Time (hours): "); 
                                     menu.show();} }, //SHOULD LET USE PARTS OF AN HOUR AS A VALUE!
   {configMenuStart, true, '!',[](){ if ((setpoint==0) || (timeLimit==0)){
                                         Serial.println("You need to set temp & time!");
@@ -184,7 +190,7 @@ void fermentLoop(){
                 /*thought to be executed when temperature gets higher than warning value
                when exothermic reaction starts to happen.
                 */
-                if ((t> WARNING_TEMPEH)&&(thresholdFlag)){
+                if ((t> warningTemperature)&&(thresholdFlag)){
                   threshold=ERROR_EXOTHERMIC_TEMP;
                   digitalWrite(WARNING_LED, HIGH);
                 }
