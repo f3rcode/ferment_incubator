@@ -27,9 +27,8 @@
 #define THREE_DAYS 259200000
 #define HOURS2MS 3600000
 
-boolean thresholdFlag= false;
-boolean decreasingFlag= false;
-boolean on= false;
+#define BLINKING_TIME 700
+#define INIT_STOP 2; //first of all, it stops warming 2degrees below setpoint (in theory, by inerce it arrives the setpoint)
 
 //Debug
 boolean debugging=true;
@@ -39,15 +38,11 @@ float h=0;
 float warningTemperature;
 
 float setpoint=0;
-float initStop=2; //first of all, it stops warming 2degrees below setpoint (in theory, by inerce it arrives the setpoint¿)
-float maxError=1; //it adjust when it's 1 degree below
-float threshold=initStop;
+float threshold=INIT_STOP;
 byte relayOutput=0;
 
 //Temporal Variables
 unsigned long timeLimit=0;
-unsigned long startingTime=0;
-int blinkingTime=700;
 
 void fermentLoop();
 
@@ -151,6 +146,38 @@ void setup() {
   delay(500);
 }
 
+void warmRelayAlgorithm(bool* thresholdFlag){
+  
+    if (t>(setpoint-threshold)) {
+      
+      //it only executes once: first time temperature gets higher than setpoint-initStop
+      if ((t>(setpoint-ERROR_TEMP))&&(!*thresholdFlag)){
+        threshold=ERROR_TEMP;
+        *thresholdFlag=true; 
+      }
+        
+    /*thought to be executed when temperature gets higher than warning value
+   when exothermic reaction starts to happen.
+    */
+      if ((t> warningTemperature)&&(*thresholdFlag)){
+        threshold=ERROR_EXOTHERMIC_TEMP;
+        digitalWrite(WARNING_LED, HIGH);
+      }
+      
+      //Serial.println("stop it!");
+      relayOutput=0;
+      digitalWrite(RELAYPIN, LOW);
+                     
+   }else{
+      
+        //Serial.println("warm it!");
+        relayOutput=1;
+        digitalWrite(RELAYPIN, HIGH);       
+   }
+
+   return;
+}
+  
 boolean sensorReading(float* h,float* t){
 
   *h = dht.readHumidity();
@@ -163,63 +190,52 @@ boolean sensorReading(float* h,float* t){
 
   return true;
 }
+
+void printSensorActuatorValues(){
+  
+  if (debugging){
+    Serial.print(t);
+    Serial.print(':');
+    Serial.print(h);
+    Serial.print(':');
+    Serial.println(relayOutput);
+ }
+
+ return;
+
+}
+
+void  blinkLed(){
+
+  digitalWrite(LED, HIGH); 
+  delay(BLINKING_TIME);              
+  digitalWrite(LED, LOW);    
+  delay(BLINKING_TIME); 
+
+  return;
+}
   
 void fermentLoop(){ 
 
-    startingTime=millis();
+    boolean thresholdFlag= false;
+    boolean on= true;
 
-    on=true;
+    unsigned long startingTime=millis();
 
     while(on){
       
-          if ((millis()-startingTime)>timeLimit) 
+          if ((millis()-startingTime)>timeLimit){ 
              on=false;
+             thresholdFlag=false;
+          }
       
           if (sensorReading(&h,&t)){ 
        
-        
-    
-             if (t>(setpoint-threshold)) {
-        
-                //it only executes once: first time temperature gets higher than setpoint-initStop
-                if ((t>(setpoint-ERROR_TEMP))&&(!thresholdFlag)){
-                    threshold=ERROR_TEMP;
-                    thresholdFlag=true; 
-                }
-        
-                /*thought to be executed when temperature gets higher than warning value
-               when exothermic reaction starts to happen.
-                */
-                if ((t> warningTemperature)&&(thresholdFlag)){
-                  threshold=ERROR_EXOTHERMIC_TEMP;
-                  digitalWrite(WARNING_LED, HIGH);
-                }
+            warmRelayAlgorithm(&thresholdFlag);
                 
-                //Serial.println("stop it!");
-                relayOutput=0;
-                digitalWrite(RELAYPIN, LOW);
-                                 
-             }else{
-                
-                  //Serial.println("warm it!");
-                  relayOutput=1;
-                  digitalWrite(RELAYPIN, HIGH);       
-             }
-                  
-           
-            //--------working--------
-            digitalWrite(LED, HIGH); 
-            delay(blinkingTime);              
-            digitalWrite(LED, LOW);    
-            delay(blinkingTime); 
-
-            if (debugging){
-              Serial.print(t);
-              Serial.print(':');
-              Serial.print(h);
-              Serial.print(':');
-              Serial.println(relayOutput);
-            }
+            blinkLed();
+            
+            printSensorActuatorValues();
         }
 
        
@@ -228,25 +244,19 @@ void fermentLoop(){
           
     digitalWrite(RELAYPIN, LOW); 
     digitalWrite(LED, LOW);    
-    //delay(blinkingTime);
+
     return; 
     
-  }
+}
 
   
 void loop() {
 
-  
-
    menu.run(500);
 
-   if(debugging && sensorReading(&h,&t)){
-     Serial.print(t);
-     Serial.print(':');
-     Serial.print(h);
-     Serial.print(':');
-     Serial.println(relayOutput);
-    }
+   if(sensorReading(&h,&t))
+    printSensorActuatorValues();
+
   
    delay(500);
 }
