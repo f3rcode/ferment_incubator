@@ -1,7 +1,6 @@
 #include <AutoPID.h>
 #include <RBDdimmer.h>
 #include "DHT.h"
-#include <DHT_U.h>
 #include <SerialMenu.hpp>
 
 #define SERIALMENU_MINIMAL_FOOTPRINT true
@@ -164,7 +163,7 @@ void setup() {
  // Serial.println("Begining!:");
   delay(500);
 
-  dimmer.begin(NORMAL_MODE, ON);
+  dimmer.begin(NORMAL_MODE, OFF);
 
 }
 
@@ -276,9 +275,9 @@ void loop() {
 
    menu.run(500);
 
-   if(sensorReading(&h,&t))
+   if(bypassingDimmerSensorReading(&h,&t,&outputDimmer))
     printSensorActuatorValues(&outputDimmer );
 
   
-   delay(500);
+   delay(1000);
 }
