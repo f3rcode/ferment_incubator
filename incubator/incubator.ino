@@ -1,21 +1,34 @@
-#include <DHT.h>
-#include <DHT_U.h>
+#include <AutoPID.h>
+#include <RBDdimmer.h>
+#include "DHT.h"
 #include <SerialMenu.hpp>
 
 #define SERIALMENU_MINIMAL_FOOTPRINT true
 
+//PID settings and gains
+#define OUTPUT_MIN 0.0
+#define OUTPUT_MAX 100.0
+#define KP 45 //lets start lighting at kp% when inside gauging rate 
+#define KI 0.0
+#define KD 1.5
 
+//Dimmer
+//D2 <- zero-cross dimmer pin (by default and not changeable)
+#define OUTPUTDIMMERPIN 12
+
+//DHT
 #define DHTPIN 7 
-#define LED 13 //led interno
-#define RELAYPIN A0
-#define WARNING_LED 9
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
+
+//LEDS
+#define LED 13 //led interno
+#define WARNING_LED 9
 
 //Temperature
 #define TEMPEH 31// 28-32 Celsius degrees (max 33 (or 35?)!! CHECK)
 #define WARNING_TEMPEH 32
 #define NATTO  42 //from about body temperature to 45
-#define WARNING_NATTO 45
+#define WARNING_NATTO 44
 #define KOJI   28 // 27–35°C
 #define WARNING_KOJI 33
 #define ERROR_TEMP 1 
@@ -27,8 +40,10 @@
 #define THREE_DAYS 259200000
 #define HOURS2MS 3600000
 
-#define BLINKING_TIME 700
+#define BLINKING_TIME 900
 #define INIT_STOP 2; //first of all, it stops warming 2degrees below setpoint (in theory, by inerce it arrives the setpoint)
+#define PID_TIMESTEP BLINKING_TIME*2
+
 
 //Debug
 boolean debugging=true;
@@ -38,8 +53,8 @@ float h=0;
 float warningTemperature;
 
 float setpoint=0;
-float threshold=INIT_STOP;
-byte relayOutput=0;
+float outputDimmer=0;
+
 
 //Temporal Variables
 unsigned long timeLimit=0;
@@ -118,7 +133,10 @@ const SerialMenuEntry configMenu[] = {
 };
 constexpr uint8_t configMenuSize = GET_MENU_SIZE(configMenu);
 
+//float and double in Arduino UNO occupy 4 bytes. The double implementation is exactly the same as the float, with no gain in precision.
+AutoPID myPID((double* )&t, (double*)&setpoint, (double*)&outputDimmer, OUTPUT_MIN, OUTPUT_MAX, KP, KI, KD);
 
+dimmerLamp dimmer(OUTPUTDIMMERPIN); 
 
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -127,9 +145,11 @@ void setup() {
   while (!Serial);      // wait for Serial Port to open
   Serial.begin(9600); 
 
-  //Relay setup
-  pinMode(RELAYPIN, OUTPUT);
-  digitalWrite(RELAYPIN, HIGH);
+  //PID setup
+  //if temperature is more than x degrees below or above setpoint, OUTPUT will be set to min or max respectively
+  //myPID.setBangBang(threshold);
+  //set PID update interval
+  myPID.setTimeStep(PID_TIMESTEP);
   
   //Warning led setup
   pinMode(WARNING_LED, OUTPUT);
@@ -144,38 +164,29 @@ void setup() {
   dht.begin();
  // Serial.println("Begining!:");
   delay(500);
+
+  dimmer.begin(NORMAL_MODE, OFF);
+
 }
 
-void warmRelayAlgorithm(bool* thresholdFlag){
-  
-    if (t>(setpoint-threshold)) {
-      
-      //it only executes once: first time temperature gets higher than setpoint-initStop
-      if ((t>(setpoint-ERROR_TEMP))&&(!*thresholdFlag)){
-        threshold=ERROR_TEMP;
-        *thresholdFlag=true; 
-      }
-        
-    /*thought to be executed when temperature gets higher than warning value
-   when exothermic reaction starts to happen.
-    */
-      if ((t> warningTemperature)&&(*thresholdFlag)){
-        threshold=ERROR_EXOTHERMIC_TEMP;
-        digitalWrite(WARNING_LED, HIGH);
-      }
-      
-      //Serial.println("stop it!");
-      relayOutput=0;
-      digitalWrite(RELAYPIN, LOW);
-                     
-   }else{
-      
-        //Serial.println("warm it!");
-        relayOutput=1;
-        digitalWrite(RELAYPIN, HIGH);       
-   }
 
-   return;
+void warmDimmerAlgorithm(){
+   
+  //t_pid=t;
+  //call every loop, but updates automatically at dimmerTimestep interval
+  myPID.run();                                     
+  //When casting from a float to an int, the value is truncated not rounded
+  
+  if (!outputDimmer) //bypassing an error in RBDimmer lib (light flickering when 0power)
+    dimmer.setState(OFF); 
+  else
+    dimmer.setPower((int)outputDimmer); 
+
+
+  if (t> warningTemperature) digitalWrite(WARNING_LED, HIGH);
+
+  return;
+
 }
   
 boolean sensorReading(float* h,float* t){
@@ -191,14 +202,30 @@ boolean sensorReading(float* h,float* t){
   return true;
 }
 
-void printSensorActuatorValues(){
+boolean bypassingDimmerSensorReading(float* h,float* t, float* out){
+
+  boolean sensorRead;
+
+  dimmer.setState(OFF); //set it off so we avoid a very short flash before getting into the DHT critical zone
+
+  sensorRead=sensorReading(h,t);
+
+  if ((sensorRead) && (*out))//bypassing RBDimmer lib error (light flickering when 0 power)
+    dimmer.setState(ON);
+
+  //if sensorReading returns false, function returns with dimmer switched off
+  return sensorRead;
+}
+
+void printSensorActuatorValues(float* output){
+
   
   if (debugging){
     Serial.print(t);
     Serial.print(':');
     Serial.print(h);
     Serial.print(':');
-    Serial.println(relayOutput);
+    Serial.println(*output);
  }
 
  return;
@@ -217,7 +244,6 @@ void  blinkLed(){
   
 void fermentLoop(){ 
 
-    boolean thresholdFlag= false;
     boolean on= true;
 
     unsigned long startingTime=millis();
@@ -226,23 +252,24 @@ void fermentLoop(){
       
           if ((millis()-startingTime)>timeLimit){ 
              on=false;
-             thresholdFlag=false;
-          }
-      
-          if (sensorReading(&h,&t)){ 
+                
+          if (bypassingDimmerSensorReading(&h,&t,&outputDimmer)){ 
        
-            warmRelayAlgorithm(&thresholdFlag);
+            warmDimmerAlgorithm();
                 
             blinkLed();
             
-            printSensorActuatorValues();
+            printSensorActuatorValues(&outputDimmer);
+
         }
 
        
        
     }//if fermentation is beyond its limit time
           
-    digitalWrite(RELAYPIN, LOW); 
+    if (dimmer.getState())
+      dimmer.setState(OFF); //Swith dimmer off
+      
     digitalWrite(LED, LOW);    
 
     return; 
@@ -254,9 +281,9 @@ void loop() {
 
    menu.run(500);
 
-   if(sensorReading(&h,&t))
-    printSensorActuatorValues();
+   if(bypassingDimmerSensorReading(&h,&t,&outputDimmer))
+    printSensorActuatorValues(&outputDimmer );
 
   
-   delay(500);
+   delay(1000);
 }
