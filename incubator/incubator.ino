@@ -1,6 +1,6 @@
 #include <DHT.h>
 #include <AutoPID.h>
-#include <RBDdimmer.h>
+#include <RBDdimmer_MOD.h>
 #include <LCDMenu.hpp>
 
 //PID settings and gains
