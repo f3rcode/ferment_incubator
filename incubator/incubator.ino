@@ -69,47 +69,6 @@ DHT dht(DHTPIN, DHTTYPE);
 
 LCDMenu& menu = LCDMenu::get();
 
-///////////////////////////////////////////////////////////////////////////////
-// Main menu
-///////////////////////////////////////////////////////////////////////////////
-
-
-const char mainMenuTempeh[]  = "1 - Tempeh";
-const char mainMenuNatto[]  = "2 - Natto";
-const char mainMenuKoji[]  = "3 - Koji";
-const char mainMenuConfig[]  = "C - Config";
-
-// Forward declarations for the config-menu referenced before it is defined.
-extern const LCDMenuEntry configMenu[];
-extern const uint8_t configMenuSize;
-
-// Define the main menu
-const LCDMenuEntry mainMenu[] = {
-  {mainMenuTempeh, [](){ setpoint=TEMPEH;  
-                                    hoursLimit=ONE_DAY;
-                                    warningTemperature=WARNING_TEMPEH;
-                                    menu.print("Go!");
-                                    fermentLoop();
-                                  } },
-  {mainMenuNatto, [](){setpoint=NATTO;  
-                                  hoursLimit=ONE_DAY;
-                                  warningTemperature=WARNING_NATTO;
-                                  menu.print("Go!");
-                                  fermentLoop();
-                                  } },
-  {mainMenuKoji, [](){ menu.print("Still not available.",(uint8_t) 1500);} },
-  {mainMenuConfig, [](){ menu.getNumber("Temp: ", (uint8_t) TEMPEH, [](int v){
-                         setpoint=v;
-                         warningTemperature = v + ERROR_TEMP;
-                         menu.getNumber("Time (hours): ", (uint8_t) HOURS2CONFIG, [](int v){
-                         hoursLimit = v;
-                         menu.print("Go!");
-                         fermentLoop();});
-                        }); }},
-
-};
-constexpr uint8_t mainMenuSize = GET_MENU_SIZE(mainMenu);
-
 //float and double in Arduino UNO occupy 4 bytes. The double implementation is exactly the same as the float, with no gain in precision.
 AutoPID myPID((double* )&t, (double*)&setpoint, (double*)&outputDimmer, OUTPUT_MIN, OUTPUT_MAX, KP, KI, KD);
 
@@ -121,28 +80,28 @@ void setup()
   while (!Serial){};  
   Serial.println("Begining!:");
 
-  //PID setup
-  //if temperature is more than x degrees below or above setpoint, OUTPUT will be set to min or max respectively
-  //myPID.setBangBang(threshold);
-  //set PID update interval
-  myPID.setTimeStep(PID_TIMESTEP);
-  
+ 
   //Warning led setup
   pinMode(WARNING_LED, OUTPUT);
   digitalWrite(WARNING_LED, LOW);
 
   menu.lcdBegin();
   // Install mainMenu as the current menu to run
-  menu.load(mainMenu, mainMenuSize);
-  // Display current menu (mainMenu)
-  menu.show();
+  menu.getNumber("Temp: ", (uint8_t) TEMPEH, [](int v){
+                        setpoint = v;
+                        warningTemperature = v + ERROR_TEMP;
+                        menu.getNumber("Time (hours): ", (uint8_t) HOURS2CONFIG, [](int v){
+                          hoursLimit = HOURS2MS * v;
+                          menu.print("Go!");
+                          dimmer.begin(NORMAL_MODE, ON);
+                          myPID.setTimeStep(PID_TIMESTEP);
+                          fermentLoop();});
+                        });
 
 
   dht.begin();
   Serial.println("Begining!:");
   delay(500);
-
-  dimmer.begin(NORMAL_MODE, ON);
 
 }
 
