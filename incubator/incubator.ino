@@ -43,8 +43,6 @@
 #define INIT_STOP 2; //first of all, it stops warming 2degrees below setpoint (in theory, by inerce it arrives the setpoint)
 #define PID_TIMESTEP BLINKING_TIME*2
 
-uint8_t outVal = 0;
-
 //Debug
 boolean debugging=true;
 //boolean dhtError=false;
@@ -101,6 +99,7 @@ const LCDMenuEntry mainMenu[] = {
                                   } },
   {mainMenuKoji, [](){ menu.print("Still not available.",(uint8_t) 1500);} },
   {mainMenuConfig, [](){ menu.getNumber("Temp: ", (uint8_t) TEMPEH, [](int v){
+                         setpoint=v;
                          warningTemperature = v + ERROR_TEMP;
                          menu.getNumber("Time (hours): ", (uint8_t) HOURS2CONFIG, [](int v){
                          hoursLimit = v;
@@ -339,18 +338,6 @@ void loop()
 {    
   menu.run(700);
   Serial.println("Begining!:loop");
-  if (outVal % 2 == 0)
-  {
-      //Serial.println("Set 10");
-      dimmer.setPower(10); // setPower(0-100%);
-      outVal++;
-  }
-  else
-  {  
-    //Serial.println("Set 3");
-    dimmer.setPower(3); // setPower(0-100%);
-    outVal--;
-  }
   //if (debugging) -> Serial.print DHT values (Serial should be let for only debugging purposes and get rid of 2nd argument)
   //UNCOMMENT printSensorActuatorValues(&outputDimmer, bypassingDimmerSensorReading(&h,&t,&outputDimmer));
 }
