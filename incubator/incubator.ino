@@ -1,5 +1,5 @@
-#include <DHT_MOD.h>
-#include <AutoPID_MOD.h>
+#include "DHT_MOD.h"
+#include <AutoPID.h>
 #include <RBDdimmer_MOD.h>
 #include <LCDMenu.hpp>
 
@@ -25,7 +25,7 @@
 //Temperature
 #define TEMPEH 31// 28-32 Celsius degrees (max 33 (or 35?)!! CHECK)
 #define WARNING_TEMPEH 32
-#define NATTO  42 //from about body temperature to 45
+#define NATTO  42 //from above body temperature to 45
 #define WARNING_NATTO 44
 #define KOJI   28 // 27–35°C
 #define WARNING_KOJI 33
@@ -56,55 +56,86 @@ float outputDimmer=0;
 
 
 //Temporal Variables
-//unsigned long timeLimit = 0;
-int8_t hoursLimit = 0;
 unsigned long startingTime = 0;
+unsigned long hoursLimit = 0; //in milliseconds
 
 void fermentLoop();
-
 
 dimmerLamp dimmer(OUTPUTDIMMERPIN); 
 
 DHT dht(DHTPIN, DHTTYPE);
 
-LCDMenu& menu = LCDMenu::get();
-
 //float and double in Arduino UNO occupy 4 bytes. The double implementation is exactly the same as the float, with no gain in precision.
 AutoPID myPID((double* )&t, (double*)&setpoint, (double*)&outputDimmer, OUTPUT_MIN, OUTPUT_MAX, KP, KI, KD);
 
+LCD_I2C lcd(0x27);
 
+bool val = false;
+
+void lcdPrint (const char* text);
 
 void setup() 
 {
-  Serial.begin(9600);
-  while (!Serial){};  
-  Serial.println("Begining!:");
-
+  lcd.begin();
+  lcd.backlight();
  
   //Warning led setup
   pinMode(WARNING_LED, OUTPUT);
   digitalWrite(WARNING_LED, LOW);
+  {
+    LCDMenu& menu = LCDMenu::get(lcd);
+  
+    // Install mainMenu as the current menu to run
+    menu.getNumber("Temp: ", (uint8_t) TEMPEH, [](int v){
+                          setpoint = v;
+                          warningTemperature = v + ERROR_TEMP;;
+                          });    
+    menu.getNumber("Time (hours): ", (uint8_t) HOURS2CONFIG, [](int hours){
+                          hoursLimit = HOURS2MS * hours;
+                          });
+  }//~LCDMenu is called when menu is out of scope
 
-  menu.lcdBegin();
-  // Install mainMenu as the current menu to run
-  menu.getNumber("Temp: ", (uint8_t) TEMPEH, [](int v){
-                        setpoint = v;
-                        warningTemperature = v + ERROR_TEMP;
-                        menu.getNumber("Time (hours): ", (uint8_t) HOURS2CONFIG, [](int v){
-                          hoursLimit = HOURS2MS * v;
-                          menu.print("Go!");
-                          dimmer.begin(NORMAL_MODE, ON);
-                          myPID.setTimeStep(PID_TIMESTEP);
-                          fermentLoop();});
-                        });
-
-
-  dht.begin();
-  Serial.println("Begining!:");
+  myPID.setTimeStep(0); //so first time we call run(), it processes
+  dht.begin(); 
   delay(500);
+  dimmer.begin(NORMAL_MODE, ON); //2. dimmer.begin() inits interrupts                           
 
+  lcdPrint("Go!");
+  fermentLoop();
 }
 
+//****lcdPrint overloads
+
+void lcdPrint (const char* text)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(text);
+}
+
+void lcdPrint (const char* text1, const char* text2)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(text1);
+  lcd.setCursor(0, 1);
+  lcd.print(text2);
+}
+
+
+void lcdPrint (float number1,float number2,float number3,const char* text)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(number1);
+  lcd.setCursor(11, 0);
+  lcd.print(text);
+  lcd.setCursor(0, 1);
+  lcd.print(number2);
+  lcd.setCursor(12, 1);
+  lcd.print(number3);
+}
+//*****end lcdPrint overloads
 
 void warmDimmerAlgorithm()
 {   
@@ -112,15 +143,15 @@ void warmDimmerAlgorithm()
   //call every loop, but updates automatically at dimmerTimestep interval
   myPID.run();                                     
   //When casting from a float to an int, the value is truncated not rounded
-  
+
   //bypassing an error in RBDimmer lib (light flickering when 0power)
-  if (!outputDimmer)
+  if (outputDimmer == 0)
   {
     dimmer.setState(OFF); 
   }
   else
   {
-    dimmer.setPower((int)outputDimmer); 
+    dimmer.setPower(static_cast<int>(outputDimmer)); 
   }
   
   if (t> warningTemperature) 
@@ -131,15 +162,16 @@ void warmDimmerAlgorithm()
   return;
 }
   
-boolean sensorReading(float* h,float* t)
+boolean sensorReading()
 {
 
-  *h = dht.readHumidity();
-  *t = dht.readTemperature();
+  t = dht.readTemperature(true); //force reading -> (DHT MIN_INTERVAL = 2000)
+  h = dht.readHumidityAlreadyRead(); //save a critical zone elapsed time
+
     
-  if (isnan(*t) || isnan(*h)) 
+  if (isnan(t) || isnan(h)) 
   {
-         Serial.println("Failed to read from DHT");
+         //Serial.println("Failed to read from DHT");
          //dhtError=true;
          return false;
   }
@@ -147,17 +179,18 @@ boolean sensorReading(float* h,float* t)
   return true;
 }
 
-boolean bypassingDimmerSensorReading(float* h,float* t, float* out)
+boolean bypassingDimmerSensorReading()
 {
 
-  boolean sensorRead;
+  boolean sensorRead = true;
   
   dimmer.setState(OFF); //set it off so we avoid a very short flash before getting into the DHT critical zone
   
-  sensorRead=sensorReading(h,t);
+  //sensorRead=sensorReading();
+  sensorReading();
   
   //bypassing RBDimmer lib error (light flickering when 0 power)
-  if ((sensorRead) && (*out))
+  if ((sensorRead) && (outputDimmer))
   {
     dimmer.setState(ON);
   }
@@ -166,11 +199,10 @@ boolean bypassingDimmerSensorReading(float* h,float* t, float* out)
   return sensorRead;
 }
 
-void reckonCountdownHoursMin(unsigned long cdown, char* conversion)
+void reckonCountdownHoursMin(unsigned long cdown,char* conversion)
 {
   char hours[5], minutes[5];
-  unsigned long cdownMin = cdown / 1000;
-  cdownMin = cdownMin / 60;
+  unsigned long cdownMin = cdown / 60000;
   
   sprintf(hours, "%d", cdownMin / 60);
   sprintf(minutes, "%d", cdownMin % 60);
@@ -185,21 +217,21 @@ void printSensorActuatorValues(float* output, boolean dhtSuccess, const char * c
 {
   if (debugging)
   {
-    Serial.print(t);
-    Serial.print(':');
-    Serial.print(h);
-    Serial.print(':');
-    Serial.println(*output);
+    //Serial.print(t);
+    //Serial.print(':');
+    //Serial.print(h);
+    //Serial.print(':');
+    //Serial.println(*output);
   }
   
   if (!dhtSuccess)
   {
-    menu.print(F("DHT error :("),F("u better shutdwn"));
+    lcdPrint("DHT error :(","u better shutdwn");
   }
 
   if (cdownHoursMin[0] != '\0')
   {        
-    menu.print(t,h,*output,cdownHoursMin);
+    lcdPrint(t,h,*output,cdownHoursMin);
   }
 }
 
@@ -211,11 +243,13 @@ void blinkLed()
   delay(BLINKING_TIME); 
 }
 
-unsigned long countdown()
+unsigned long countdown(unsigned long& startingTime)
 {
-  if (startingTime != 0)
+  unsigned long currentTime = millis();
+  
+  if ((hoursLimit) - (currentTime-startingTime) > 0)
   {
-    return (HOURS2MS * hoursLimit) - (millis()-startingTime);
+    return (hoursLimit) - (currentTime-startingTime);
   }
   
   return 0;
@@ -236,41 +270,45 @@ boolean checkChangeInValues(float * tOld, float * hOld, float * outputDimmmerOld
   
 void fermentLoop()
 { 
-  boolean on = true;
   boolean changeInValues = true;
-  char cdownHoursMin[6], cdownHoursMinOld[6];
+  char cdownHoursMin[6] = "\0", cdownHoursMinOld[6] = "\0";
   float hOld, tOld, outputDimmerOld;
   
-  startingTime = millis();
+  unsigned long startingTime = millis();
   
-  while(on){
+  warmDimmerAlgorithm();
+  myPID.setTimeStep(PID_TIMESTEP);
+
+  while(true){
     
-      if (countdown() <= 0)
+      if (countdown(startingTime) <= 0)
       {
-         on = false;
+         lcdPrint("Bye!");
+         break;
       }
       hOld = h;
       tOld = t;
       outputDimmerOld = outputDimmer;
-      strcpy(cdownHoursMinOld,cdownHoursMin);
+      //strcpy(cdownHoursMinOld,cdownHoursMin);
+
       
-      boolean isSensorReadingSuccess = bypassingDimmerSensorReading(&h,&t,&outputDimmer);
-      reckonCountdownHoursMin(countdown(),cdownHoursMin);
-  
-      if (checkChangeInValues(&tOld,&hOld,&outputDimmerOld) ||
+      boolean isSensorReadingSuccess = bypassingDimmerSensorReading();
+      reckonCountdownHoursMin(countdown(startingTime),cdownHoursMin);
+
+      /*if (checkChangeInValues(&tOld,&hOld,&outputDimmerOld) ||
         (strcmp(cdownHoursMinOld,cdownHoursMin) != 0 ))
       {
         changeInValues = false;
-      }
-      
+      }*/
+
       if (isSensorReadingSuccess)
       {      
-        Serial.println("reading succcess to warm");
+        //Serial.println("reading succcess to warm");
         warmDimmerAlgorithm();
             
-        blinkLed();
+        //blinkLed();
   
-        if (!changeInValues)
+        if (changeInValues)
         {          
           printSensorActuatorValues(&outputDimmer, isSensorReadingSuccess, cdownHoursMin);
         }
@@ -280,8 +318,7 @@ void fermentLoop()
      delay(1000);       
   }//if fermentation is beyond its limit time
   
-  startingTime = 0;
-  
+ 
   if (dimmer.getState())
   {
     dimmer.setState(OFF); //Switch dimmer off
@@ -292,11 +329,7 @@ void fermentLoop()
   return;       
 }
 
-  
+
 void loop() 
-{    
-  menu.run(700);
-  Serial.println("Begining!:loop");
-  //if (debugging) -> Serial.print DHT values (Serial should be let for only debugging purposes and get rid of 2nd argument)
-  //UNCOMMENT printSensorActuatorValues(&outputDimmer, bypassingDimmerSensorReading(&h,&t,&outputDimmer));
+{ 
 }
