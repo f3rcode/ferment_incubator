@@ -106,8 +106,8 @@ void setup()
   lcd.print("Setpoint: ");
   lcd.print(setpoint);
   lcd.print(" ºC");
-
-  // TODO: Preheat function
+ 
+  preHeat();
   fermentLoop();
 }
 

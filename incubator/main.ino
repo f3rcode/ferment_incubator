@@ -87,3 +87,53 @@ void fermentLoop()
   
   return;       
 }
+
+// preHeat function heats the incubator 
+// and prevents the ferments from the first peak of temperature,
+// which is the highest.
+// Note that time doesn't really starts until preHeat function returns
+// and fermentLoop begins.
+void preHeat()
+{
+  char cdownHoursMin[6] = "\0";
+  char preheatText[8] = "PREHEAT";
+  boolean increasingFlag = false;
+  float previousTemp = 0; 
+  unsigned long startingTime = millis();
+  
+  warmDimmerAlgorithm();
+  myPID.setTimeStep(PID_TIMESTEP);
+
+  while(true){
+
+      if (!increasingFlag && t > setpoint)
+      {
+        increasingFlag = true;
+      }
+      
+      // if temperature is decreasing 
+      // and it's around a degree above the setpoint
+      if (increasingFlag && 
+         t < previousTemp && 
+         t <= setpoint + 1)
+      {
+        break;
+      }
+
+      previousTemp = t;
+      
+      boolean isSensorReadingSuccess = bypassingDimmerSensorReading();
+      reckonCountdownHoursMin(millis()-startingTime,cdownHoursMin);
+
+      // TODO: check change in values 
+      
+      if (isSensorReadingSuccess)
+      {
+        warmDimmerAlgorithm();
+                
+        printSensorValuesText(isSensorReadingSuccess, cdownHoursMin, preheatText);
+     }
+
+     delay(1000);       
+  }
+}
