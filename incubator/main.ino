@@ -1,5 +1,5 @@
 // Important:
-// rduino IDE concatenates all .ino files, starting with the .ino file that matches the sketch folder name, 
+// Arduino IDE concatenates all .ino files, starting with the .ino file that matches the sketch folder name, 
 // followed by the rest of the .ino files in ALPHABETICAL order.
 // This file is named as main for convenience.
 // https://arduino.stackexchange.com/questions/60656/split-up-arduino-code-into-multiple-files-using-arduino-ide
@@ -42,9 +42,9 @@ void fermentLoop()
 
   while(true){
     
-      if (countdown(startingTime) <= 0)
+      if (countdown(startingTime) == 0)
       {
-         lcdPrint("Bye!");
+         lcdPrint("Ready!");
          break;
       }
       hOld = h;

@@ -17,9 +17,9 @@ unsigned long countdown(unsigned long& startingTime)
 {
   unsigned long currentTime = millis();
   
-  if ((hoursLimit) - (currentTime-startingTime) > 0)
+  if (hoursLimit > currentTime - startingTime)
   {
-    return (hoursLimit) - (currentTime-startingTime);
+    return (hoursLimit) - (currentTime - startingTime);
   }
   
   return 0;

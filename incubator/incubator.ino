@@ -98,8 +98,16 @@ void setup()
   dht.begin(); 
   delay(500);
   dimmer.begin(NORMAL_MODE, ON); //2. dimmer.begin() inits interrupts                           
+ 
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Go!");
+  lcd.setCursor(0, 1);
+  lcd.print("Setpoint: ");
+  lcd.print(setpoint);
+  lcd.print(" ºC");
 
-  lcdPrint("Go!");
+  // TODO: Preheat function
   fermentLoop();
 }
 
